@@ -1,16 +1,17 @@
 name: Test
 on:
-  push:
-    branches:
-      - main
-      - v3
-  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   full:
-    name: Node.js Latest Full
+    name: Node.js ${{ matrix.node-version }} Full
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [23, 22]
     steps:
       - name: Checkout the repository
         uses: actions/checkout@v3
@@ -21,9 +22,23 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 23
+          node-version: ${{ matrix.node-version }}
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Run tests
         run: pnpm test
+      - name: Build the release tarball
+        if: matrix.node-version == 22
+        run: |
+          pnpm exec clean-publish --without-publish --temp-dir clean-package
+          mkdir -p dist
+          cd clean-package
+          npm pack --pack-destination ../dist
+      - name: Upload the release tarball
+        if: matrix.node-version == 22
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-tarball
+          path: dist/nanoid-*.tgz
+          if-no-files-found: error
